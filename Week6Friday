@@ -1,0 +1,68 @@
+
+Virtual Memory Continued, the file systems
+
+Thrashing: memory overcommitted - performance collapse
+In demand paging when we try to run too many things at once, amount of memory actively using exceeds capacity of main memory. Performance collapse due to system spending all of its time on page faults and no time getting actual work done. 
+What happens to the efficiency of a system as the load increases? We would like it to get more efficient, and we definitely don't want efficiency to drop off as load increases. This makes the system vulnerable to system collapse. 
+This was a big problem in time sharing when multiple people were sharing a system. 
+Need some automatic control to deal with thrashing. Only way to do that is to stop running some programs for a while (pick a few to move off disk and don't run them for a long time). Still results in unacceptable performance, but can be reasonably efficient. Don't really do this today.
+Today, there is only one user on the system and if bad things happen you notice the thrashing and you don't run some programs (the programs that cause thrashing?) manually kill programs. 
+The right solution is to just buy more memory. 
+
+
+File Systems how we manage secondary storage
+Disks: how hard disks/hard drives work. Hard drives have peculiar characteristics that have a fundamental impact on how we build file systems. Today we are moving away from hard drives and towards flash drives. To understand how current software works, we need to understand disks. 
+Platters: circular disk surfaces. Some number from 1-10ish. Each platter has two surfaces (top and bottom) that are magnetically coated(coded?) to store info. Platters spin at a fixed rate in the range of 5,000-15,000 rpm. 
+Actuator arm: kind of like a fork. One tine goes on top, then one between each platter, and one on the bottom. Can be positioned at any radial position on the disk. 
+Disk read/write head: doesn't actually touch disk.
+
+Track: all of the data you can write without moving the disk head. Typical disk density is 200,000 tracks per radial inch. 
+Sectors: cord on circular track. Typically 4096 bytes. Typical track will contain a few thousand sectors. Total capacity typical range is 100GB-2TB. 
+100GB is roughly 50m pages of double spaced text.
+Disk drives are one of the most rapidly advancing technology. 
+How do we access information on a disk? 
+
+
+To do I/O operation on a disk there are 3 stages:
+1.) Seek - this is where we position the heads. Move actuator arm to specific position so that the head is right over the track that you want to read or write. 2-10ms
+2.) Rotational latency - waiting for the platter to spin around to the info you want passes under the read/write head/wait for desired sector to pass under the head. 4ms 
+3.) Transfer - read or write sectors as they pass under the head. 100-150MB/sec
+
+The number of sectors per track varies with position on disk. More on the outer edges versus in the inner ring.
+
+Imagine we're looking sideways at the disk. The head is stationary and the disk is spinning. Because of friction, the platter drags air with it. That creates an airflow, and the result of that is that the disk head flies and has aerodynamic properties. There is a spring above the head trying to force the head to the platter, but the cushion of air keeps them apart. The goal is to get the head as close as possible to the surface. The gap between the head and the platter is about 3nm (3 x 10^-9)
+The typical piece of dust is 5 x 10^-6 in diameter. (if gap is 1 inch, dust particle is 120m high)
+What happens if dust gets dragged along? Dust has shockwave of air that pushes head up a little. Bad aspect is that afterwards creates a vacuum, where head will hit disk. This is called a head crash where head digs into surface of platter and destroys surface. In laptops there used to be accelerometers that could detect a drop and move heads away. Disks also have landing area/parking zone which are the innermost tracks so when the disk drive shuts down, the head rests against the surface of those tracks. Not used for data, so no issues. This will wear down on head, but they are pretty durable. 
+How does an OS actually access a disk? You can kind of think of the disk like a class with some methods you can call. 
+The API for a disk: 
+• Read (start sector, sector count, physical memory address)
+• Write (start sector, sector count, physical memory address)
+In the old days, geometry exposed: read(track, surface, sector, sector count, physical memory address). Sometimes there is an advantage to knowing geometry of the drive
+Disk drives hidden to:
+• inner tracks have fewer sectors so there would be complexity to expose exactly when the tracks drop a sector
+• For remapping bad sectors. today's drives (because of density you're trying to record) are pushing the limits of our technology in terms of manufacturing these platters with a uniform surface structure that can record at that density. Any given platter will have sectors that are no good. Platter has more sectors than it tells the OS (form of virtualization).
+The disk has a bunch of additional redundant information that it can use to detect disk drops
+How does an OS communicate with a disk? In hardware, there are device registers. Typically a block for each device (disk drive, timer, network interface all have blocks of device registers)
+These registers appear to the OS as memory locations as words (typically multiple for each device)
+Individual bits can have distinct meanings. 
+Words in memory:
+• Can provide parameters for operations like starting sector and sector count
+• various other bits such as status bits (indication about devices current status such as operation completed or error)
+• Control bits set by OS to cause something to happen in device such as start disk operation
+Registers don't behave like memory. You might be able to write them, but they always return zero. 
+Bits can change without being written (ex. an operation completes and now register is 1)
+Lifetime of an I/O operation:
+• write registers to start operation
+• "ready" bit will now read zero
+• "ready" bit stays zero until device finishes operation. When done, reads 1. Instead of polling, use interrupts to notify us when operation finished. 
+There is typically an interrupt enable bit in register. OS will set bit and then do something else.
+When device becomes ready, if interrupts enabled, device will interrupt. 
+Behavior of interrupt the same as trap instruction for page fault:
+• save instruction pointer and processor status
+• branch into OS, load a new processor status (stored in interrupt vector)
+When the OS services an interrupt, it needs to be careful to disable interrupt enable bit, otherwise device will interrupt over and over.
+Interrupt mechanism allows us to juggle many devices at the same time and handle ready states as they occur.
+How does OS know what device is interrupting? Typically some info provided. Architecture dependent, but you can assign a device to an interrupt vector and poll device and interrupt handler specific to each vector.
+What happens in multi-core machine? Who takes interrupt? In early days, all interrupts would go to core zero. Now we have mechanisms for spreading interrupts around to different cores. Load balancing ensures we don't have the same core getting all the interrupts.
+DMA - Direct Memory Access: device can read and write words from memory.
+Before DMA, this was too complex. Would sometimes do Programmed I/O where OS feeds data one byte at a time to the device through device registers. Impractical due to CPU time. 
