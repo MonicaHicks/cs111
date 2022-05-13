@@ -1,0 +1,57 @@
+
+Page fetching: never bring a page into memory until it is actually needed by the process.
+
+
+Pages are either read only, read-write, or initialized data. 
+Initialized data: things like global variables
+Uninitialize: things like stack, malloc
+
+Alternative is to pre-fetch pages even if we don't know that they will necessarily be needed.
+One approach is when you have a page fault read several pages immediately after fault instead of single page.
+Reading from disk: cost of page 1: 5-10ms, each additional page is .04ms
+That means 100 extra pages costs 4ms
+
+Bring a page into memory-->kick a page out of memory.
+Which page to remove?
+• random page removal 
+• FIFO (page in memory the longest) fairest
+• MIN: the page whose next reference is furthest in the future
+• LRU least recently used
+
+Implementing LRU: need hardware
+Keep one register in hardware for every page of memory
+Every time a page is reference store time it was registered
+This is too expensive. Instead use an approximation
+We have two extra bits in page map entry. Reference and dirty bit.
+Ref bit set whenever access to page.
+Dirty bit set whenever the page is written to. 
+Technically we don't need these bits. We have present bit, so we can figure these out with software. Machines today have them in hardware. Convenient. Prevent page faults. 
+
+Clock algorithm (second chance)
+All of the pages in memory are being positioned around the edge of a clock
+Imagine there is a hand on the clock that points to one of those pages (current page) and this hand sweeps around clockwise overtime (we progress scanning pages in a certain order).
+What happens on a page fault? First we advance the hand, and then check the reference bit of the current page. If it has been referenced, clear ref bit and continue to the next page. We advance the hand and try again. Scan through until we find a page that has not been referenced. If a page has not been referenced, we replace that page. Guaranteed to eventually find a page. If the hand sweeps all the way around, it will find the first page that we cleared the ref bit of. 
+Imagine we have this algorithm and we can observe how fast the hand is moving.
+What does it mean for the hand to move slowly? not many page faults happening.
+What does it mean for the hand to move fast? a lot of page faults or memory too small.
+
+Is the page dirty? If not-->replace. If it is dirty, start writing page out but then go on to next page. In meantime, try to find some other page we can use to get our program running again. 
+
+How do we handle page replacement when there are many processes in the system?
+Global replacement: with global replacement, all of the page of all of the processes are together in a single pool. A page fault in one process can throw out other processes. This has a vulnerability. One badly behaved process can destroy the performance of the entire system (call it a pig. one pig hurts everyone).
+Alternative is process replacement. Separate pool for every process. When you replace, you only replace with a page from the same process. Pig will only effect itself.
+How do you decide how much memory each process should get? Dividing fairly among processes can waste memory. Dividing based on memory needed for process can go back to global. 
+Global replacement used pretty much everywhere. 
+Thrashing: problem here is what do we do if memory gets over-committed? If the set of processes currently running use more pages than we have in physical memory. 
+What do we do in that situation? Memory is over committed. We take a page fault and throw it out of memory, but it is almost immediately referenced by someone else. We are page faulting active pages.
+This will generate another page fault really soon. With demand paging, you can sometimes hide the cost of a page fault. Problem with thrashing is that every page of memory is needed. It is stuck in a mode where no thread can run. Continuous page faults. Computer getting work done at the rate of the disk (bad rate).
+Supposed normal memory ref happens every 100 nano seconds. When a program is running, roughly every 100 nano second it tried to make a reference to memory (100 x 10^-9 seconds). Suppose memory is 1% too small. 1 out of 100 references will touch a page we just threw out. We will get a page fault every 100 references. Say reading a page takes 10ms (10 x 10^-3).
+So no page faults means 100 references takes 100 x (100 x 10^-9) = 1 x 10^-5
+One page fault per hundred takes 10^-5 + 10 ^-2
+0.00001 vs 0.01 is that 1000 times slower?
+You were right. woohooo.
+John did it by figuring out how many references we get per second. Good case: 10^-7 since roughly 10million ref per second. In bad case we get 10 ref every millisecond, so 10^-4 per second. 
+A factor of 1000 is catastrophic. A keystroke appears in 1/10 of a second. You would wait 1.5 minutes to see your keystroke. This is a really bad thing. This made memory almost as bad as disk which is really really bad. 
+
+
+
